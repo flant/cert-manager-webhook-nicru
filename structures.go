@@ -6,13 +6,6 @@ type NicruClient struct {
 	token string
 }
 
-type NicruTokens struct {
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int    `json:"expires_in"`
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-}
-
 type Request struct {
 	XMLName xml.Name `xml:"request"`
 	Text    string   `xml:",chardata"`
@@ -21,7 +14,7 @@ type Request struct {
 
 type RrList struct {
 	Text string `xml:",chardata"`
-	Rr   []Rr   `xml:"rr"`
+	Rr   []*Rr  `xml:"rr"`
 }
 
 type Rr struct {
@@ -67,6 +60,7 @@ type Zone struct {
 			Name       string `xml:"name,attr"`
 			Payer      string `xml:"payer,attr"`
 			Service    string `xml:"service,attr"`
+			RR         []*Rr  `xml:"rr"`
 		} `xml:"zone"`
 	} `xml:"data"`
 }
