@@ -35,31 +35,48 @@ func main() {
 
 type nicruDNSProviderSolver struct {
 	client *kubernetes.Clientset
+	RrId   string
 }
 
 type nicruDNSProviderConfig struct {
 	NicruApiTokenSecretRef cmmeta.SecretKeySelector `json:"nicruTokenSecretRef"`
 }
 
-func (c *nicruDNSProviderSolver) Present(challengeRequest *v1alpha1.ChallengeRequest) (string, error) {
-	klog.Infof("call function Present: namespace=%s, zone=%s, fqdn=%s", challengeRequest.ResourceNamespace, challengeRequest.ResolvedZone, challengeRequest.ResolvedFQDN)
-	cfg, err := loadConfig(challengeRequest.Config)
+func (c *nicruDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
+	var ZoneName, ServiceName = nicruClient.getZoneInfo(cr.ResolvedZone)
+
+	klog.Infof("Call function Present: namespace=%s, zone=%s, fqdn=%s", cr.ResourceNamespace, cr.ResolvedZone, cr.ResolvedFQDN)
+
+	cfg, err := loadConfig(cr.Config)
 	if err != nil {
-		klog.Errorf("Unable to load config: %v", err)
+		return fmt.Errorf("Unable to load config: %v", err)
 	}
+
 	klog.Infof("Decoded configuration %v", cfg)
+	klog.Infof("Present for entry=%s, domain=%s, key=%s", cr.ResolvedFQDN, cr.ResolvedZone, cr.Key)
 
-	klog.Infof("Present for entry=%s, domain=%s, key=%s", challengeRequest.ResolvedFQDN, challengeRequest.ResolvedZone, challengeRequest.Key)
+	nicruClient.Txt(cr.ResolvedFQDN, ServiceName, ZoneName)
 
-	var ZoneName, ServiceName = nicruClient.getZoneInfo(challengeRequest.ResolvedZone)
-	rrId := nicruClient.Txt(challengeRequest.ResolvedFQDN, ServiceName, ZoneName)
-
-	return rrId, err
+	return nil
 }
 
-func (c *nicruDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
+func (c *nicruDNSProviderSolver) CleanUp(cr *v1alpha1.ChallengeRequest) error {
+	var ZoneName, ServiceName = nicruClient.getZoneInfo(cr.ResolvedZone)
+	rrId := nicruClient.getRecord(ServiceName, ZoneName, cr.ResolvedFQDN)
 
-	return
+	klog.Infof("Call function CleanUp: namespace=%s, zone=%s, fqdn=%s", cr.ResourceNamespace, cr.ResolvedZone, cr.ResolvedFQDN)
+
+	cfg, err := loadConfig(cr.Config)
+	if err != nil {
+		return fmt.Errorf("Error: %s", err)
+	}
+
+	klog.Infof("Decoded configuration %v", cfg)
+	klog.Infof("Delete for entry=%s, domain=%s, key=%s", cr.ResolvedFQDN, cr.ResolvedZone, cr.Key)
+
+	nicruClient.deleteRecord(ServiceName, ZoneName, rrId)
+
+	return nil
 }
 
 func (c *nicruDNSProviderSolver) Name() string {
