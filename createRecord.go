@@ -44,6 +44,8 @@ func (c *NicruClient) createRecord(request *Request, serviceName, zoneName strin
 	}
 
 	err = xml.Unmarshal(body, &zone)
+	bodyStr := string(body)
+	klog.Infof("Body: %s", bodyStr)
 	if err != nil {
 		klog.Errorf("Failed marshal xml: %s", err)
 	}

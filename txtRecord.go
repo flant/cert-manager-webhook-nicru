@@ -1,6 +1,6 @@
 package main
 
-func (c *NicruClient) Txt(recordName, serviceName, zoneName string) string {
+func (c *NicruClient) Txt(recordName, serviceName, zoneName, content string) string {
 	var record = &Request{
 		RrList: &RrList{
 			Rr: []*Rr{},
@@ -10,7 +10,7 @@ func (c *NicruClient) Txt(recordName, serviceName, zoneName string) string {
 		Name: recordName,
 		Type: "TXT",
 		Txt: &TxtRecord{
-			String: "Test record"}})
+			String: content}})
 	rrId := c.createRecord(record, serviceName, zoneName)
 	return rrId
 }

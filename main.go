@@ -55,7 +55,7 @@ func (c *nicruDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
 	klog.Infof("Decoded configuration %v", cfg)
 	klog.Infof("Present for entry=%s, domain=%s, key=%s", cr.ResolvedFQDN, cr.ResolvedZone, cr.Key)
 
-	nicruClient.Txt(cr.ResolvedFQDN, ServiceName, ZoneName)
+	nicruClient.Txt(cr.ResolvedFQDN, ServiceName, ZoneName, cr.Key)
 
 	return nil
 }
