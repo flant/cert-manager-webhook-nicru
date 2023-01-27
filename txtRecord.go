@@ -8,6 +8,7 @@ func (c *NicruClient) Txt(recordName, serviceName, zoneName, content string) str
 	}
 	record.RrList.Rr = append(record.RrList.Rr, &Rr{
 		Name: recordName,
+		TTL:  60,
 		Type: "TXT",
 		Txt: &TxtRecord{
 			String: content}})

@@ -37,6 +37,7 @@ func (c *NicruClient) deleteRecord(serviceName, zoneName, rrId string) {
 	}
 	if response.Status == "success" {
 		klog.Infof("Record successfully deleted.")
+		nicruClient.Commit(serviceName, zoneName)
 	} else {
 		klog.Errorf("Record has not been deleted")
 	}

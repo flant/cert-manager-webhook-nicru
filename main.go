@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"os"
+	"strings"
 )
 
 const (
@@ -43,7 +44,8 @@ type nicruDNSProviderConfig struct {
 }
 
 func (c *nicruDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
-	var ZoneName, ServiceName = nicruClient.getZoneInfo(cr.ResolvedZone)
+	targetZone := (cr.ResolvedZone[0 : len(cr.ResolvedZone)-1])
+	var ZoneName, ServiceName = nicruClient.getZoneInfo(targetZone)
 
 	klog.Infof("Call function Present: namespace=%s, zone=%s, fqdn=%s", cr.ResourceNamespace, cr.ResolvedZone, cr.ResolvedFQDN)
 
@@ -61,8 +63,11 @@ func (c *nicruDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
 }
 
 func (c *nicruDNSProviderSolver) CleanUp(cr *v1alpha1.ChallengeRequest) error {
-	var ZoneName, ServiceName = nicruClient.getZoneInfo(cr.ResolvedZone)
-	rrId := nicruClient.getRecord(ServiceName, ZoneName, cr.ResolvedFQDN)
+	targetZone := (cr.ResolvedZone[0 : len(cr.ResolvedZone)-1])
+	var ZoneName, ServiceName = nicruClient.getZoneInfo(targetZone)
+	domainName := fmt.Sprintf(".%s", cr.ResolvedZone)
+	recordName := strings.TrimSuffix(cr.ResolvedFQDN, domainName)
+	rrId := nicruClient.getRecord(ServiceName, ZoneName, recordName)
 
 	klog.Infof("Call function CleanUp: namespace=%s, zone=%s, fqdn=%s", cr.ResourceNamespace, cr.ResolvedZone, cr.ResolvedFQDN)
 

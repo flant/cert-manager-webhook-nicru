@@ -53,6 +53,7 @@ func (c *NicruClient) createRecord(request *Request, serviceName, zoneName strin
 	rrId := zone.Data.Zone[0].RR[0].ID
 	if zone.Status == "success" {
 		klog.Infof("Record successfully added. rrId=%s", rrId)
+		nicruClient.Commit(serviceName, zoneName)
 	} else {
 		klog.Error("Record has not created")
 	}

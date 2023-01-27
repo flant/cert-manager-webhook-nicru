@@ -21,6 +21,7 @@ type Rr struct {
 	Text string     `xml:",chardata"`
 	ID   string     `xml:"id,attr,omitempty"`
 	Name string     `xml:"name"`
+	TTL  int        `xml:"ttl"`
 	Type string     `xml:"type"`
 	Txt  *TxtRecord `xml:"txt"`
 }
