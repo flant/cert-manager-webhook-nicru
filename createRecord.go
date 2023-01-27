@@ -20,7 +20,6 @@ func (c *NicruClient) createRecord(request *Request, serviceName, zoneName strin
 		klog.Errorf("Failed marshal XML: %s", err)
 	}
 	bodyPayload := bytes.NewBuffer([]byte(payload))
-	klog.Infof("Payload: %s", bodyPayload)
 
 	req, err := http.NewRequest("PUT", url, bodyPayload)
 
@@ -44,8 +43,6 @@ func (c *NicruClient) createRecord(request *Request, serviceName, zoneName strin
 	}
 
 	err = xml.Unmarshal(body, &zone)
-	bodyStr := string(body)
-	klog.Infof("Body: %s", bodyStr)
 	if err != nil {
 		klog.Errorf("Failed marshal xml: %s", err)
 	}

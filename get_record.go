@@ -10,7 +10,7 @@ import (
 
 func (c *NicruClient) getRecord(serviceName, zoneName, recordName string) string {
 	var zone Zone
-	urlRecord := fmt.Sprintf("%sservices/%s/zones/&s/records", urlApi, serviceName, zoneName)
+	urlRecord := fmt.Sprintf("%sservices/%s/zones/%s/records", urlApi, serviceName, zoneName)
 	req, err := http.NewRequest("GET", urlRecord, nil)
 	if err != nil {
 		klog.Errorf("Message: %s", err)
