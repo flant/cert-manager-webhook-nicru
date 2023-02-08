@@ -32,10 +32,12 @@ var (
 	NAMESPACE  = os.Getenv("NAMESPACE")
 )
 
-func (c *nicruDNSProviderSolver) main() {
+func main() {
 	if GroupName == "" {
 		panic("GROUP_NAME must be specified")
 	}
+	
+	c := nicruDNSProviderSolver{}
 	go c.cronUpdateToken()
 
 	cmd.RunWebhookServer(GroupName,

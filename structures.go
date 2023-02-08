@@ -1,6 +1,8 @@
 package main
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+)
 
 type NicruTokens struct {
 	RefreshToken string `json:"refresh_token"`
