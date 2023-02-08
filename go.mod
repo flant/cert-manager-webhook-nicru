@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/cert-manager/cert-manager v1.11.0
+	github.com/go-co-op/gocron v1.18.0
 	k8s.io/apiextensions-apiserver v0.26.1
 	k8s.io/client-go v0.26.1
 	k8s.io/klog/v2 v2.80.1
@@ -52,6 +53,7 @@ require (
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.39.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
+	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/spf13/cobra v1.6.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stoewer/go-strcase v1.2.1 // indirect

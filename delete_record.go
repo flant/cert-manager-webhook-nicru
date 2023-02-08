@@ -8,16 +8,17 @@ import (
 	"net/http"
 )
 
-func (c *NicruClient) deleteRecord(serviceName, zoneName, rrId string) {
+func (c *nicruDNSProviderSolver) deleteRecord(serviceName, zoneName, rrId string) {
 	var response Response
-	url := fmt.Sprintf("%sservices/%s/zones/%s/records/%s", urlApi, serviceName, zoneName, rrId)
+	_, accessToken := c.getSecretData()
+	url := fmt.Sprintf(urlDeleteRecord, serviceName, zoneName, rrId)
 
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		klog.Errorf("Error: %s", err)
 	}
 
-	header := fmt.Sprintf("Bearer %s", c.token)
+	header := fmt.Sprintf("Bearer %s", accessToken)
 	req.Header.Add("Authorization", header)
 
 	res, err := http.DefaultClient.Do(req)
@@ -37,7 +38,7 @@ func (c *NicruClient) deleteRecord(serviceName, zoneName, rrId string) {
 	}
 	if response.Status == "success" {
 		klog.Infof("Record successfully deleted.")
-		nicruClient.Commit(serviceName, zoneName)
+		c.Commit(serviceName, zoneName)
 	} else {
 		klog.Errorf("Record has not been deleted")
 	}

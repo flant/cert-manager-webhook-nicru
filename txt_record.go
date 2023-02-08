@@ -1,6 +1,6 @@
 package main
 
-func (c *NicruClient) Txt(recordName, serviceName, zoneName, content string) string {
+func (c *nicruDNSProviderSolver) Txt(recordName, serviceName, zoneName, content string) string {
 	var record = &Request{
 		RrList: &RrList{
 			Rr: []*Rr{},

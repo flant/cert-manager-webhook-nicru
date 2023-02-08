@@ -15,19 +15,28 @@ import (
 )
 
 const (
-	urlApi = "https://api.nic.ru/dns-master/"
+	nameSecret      = "nicru-tokens"
+	apiUrl          = `https://api.nic.ru/`
+	oauthUrl        = apiUrl + `oauth/token`
+	urlCommit       = apiUrl + `dns-master/services/%s/zones/%s/commit`
+	urlCreateRecord = apiUrl + `dns-master/services/%s/zones/%s/records`
+	urlDeleteRecord = apiUrl + `dns-master/services/%s/zones/%s/records/%s`
+	urlGetRecord    = apiUrl + `dns-master/services/%s/zones/%s/records`
+	urlGetZoneInfo  = apiUrl + `dns-master/zones/?token=%s`
 )
 
 var (
-	nicru       = NicruClient{os.Getenv("TOKEN")}
-	nicruClient = NewNicruClient(nicru.token)
-	GroupName   = os.Getenv("GROUP_NAME")
+	GroupName  = os.Getenv("GROUP_NAME")
+	APP_ID     = os.Getenv("APP_ID")
+	APP_SECRET = os.Getenv("APP_SECRET")
+	NAMESPACE  = os.Getenv("NAMESPACE")
 )
 
-func main() {
+func (c *nicruDNSProviderSolver) main() {
 	if GroupName == "" {
 		panic("GROUP_NAME must be specified")
 	}
+	go c.cronUpdateToken()
 
 	cmd.RunWebhookServer(GroupName,
 		&nicruDNSProviderSolver{},
@@ -36,7 +45,6 @@ func main() {
 
 type nicruDNSProviderSolver struct {
 	client *kubernetes.Clientset
-	RrId   string
 }
 
 type nicruDNSProviderConfig struct {
@@ -45,7 +53,7 @@ type nicruDNSProviderConfig struct {
 
 func (c *nicruDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
 	targetZone := (cr.ResolvedZone[0 : len(cr.ResolvedZone)-1])
-	var ZoneName, ServiceName = nicruClient.getZoneInfo(targetZone)
+	var ZoneName, ServiceName = c.getZoneInfo(targetZone)
 
 	klog.Infof("Call function Present: namespace=%s, zone=%s, fqdn=%s", cr.ResourceNamespace, cr.ResolvedZone, cr.ResolvedFQDN)
 
@@ -57,17 +65,17 @@ func (c *nicruDNSProviderSolver) Present(cr *v1alpha1.ChallengeRequest) error {
 	klog.Infof("Decoded configuration %v", cfg)
 	klog.Infof("Present for entry=%s, domain=%s, key=%s", cr.ResolvedFQDN, cr.ResolvedZone, cr.Key)
 
-	nicruClient.Txt(cr.ResolvedFQDN, ServiceName, ZoneName, cr.Key)
+	c.Txt(cr.ResolvedFQDN, ServiceName, ZoneName, cr.Key)
 
 	return nil
 }
 
 func (c *nicruDNSProviderSolver) CleanUp(cr *v1alpha1.ChallengeRequest) error {
 	targetZone := (cr.ResolvedZone[0 : len(cr.ResolvedZone)-1])
-	var ZoneName, ServiceName = nicruClient.getZoneInfo(targetZone)
+	var ZoneName, ServiceName = c.getZoneInfo(targetZone)
 	domainName := fmt.Sprintf(".%s", cr.ResolvedZone)
 	recordName := strings.TrimSuffix(cr.ResolvedFQDN, domainName)
-	rrId := nicruClient.getRecord(ServiceName, ZoneName, recordName)
+	rrId := c.getRecord(ServiceName, ZoneName, recordName)
 
 	klog.Infof("Call function CleanUp: namespace=%s, zone=%s, fqdn=%s", cr.ResourceNamespace, cr.ResolvedZone, cr.ResolvedFQDN)
 
@@ -79,7 +87,7 @@ func (c *nicruDNSProviderSolver) CleanUp(cr *v1alpha1.ChallengeRequest) error {
 	klog.Infof("Decoded configuration %v", cfg)
 	klog.Infof("Delete for entry=%s, domain=%s, key=%s", cr.ResolvedFQDN, cr.ResolvedZone, cr.Key)
 
-	nicruClient.deleteRecord(ServiceName, ZoneName, rrId)
+	c.deleteRecord(ServiceName, ZoneName, rrId)
 
 	return nil
 }
@@ -92,7 +100,7 @@ func (c *nicruDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, _ <-c
 	klog.Infof("call function Initialize")
 	cl, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {
-		return fmt.Errorf("unable to get k8s client: %v", err)
+		return fmt.Errorf("Unable to get k8s client: %v", err)
 	}
 	c.client = cl
 	return nil

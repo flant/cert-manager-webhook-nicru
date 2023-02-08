@@ -8,15 +8,18 @@ import (
 	"net/http"
 )
 
-func (c *NicruClient) getRecord(serviceName, zoneName, recordName string) string {
+func (c *nicruDNSProviderSolver) getRecord(serviceName, zoneName, recordName string) string {
 	var zone Zone
-	urlRecord := fmt.Sprintf("%sservices/%s/zones/%s/records", urlApi, serviceName, zoneName)
+	_, accessToken := c.getSecretData()
+
+	urlRecord := fmt.Sprintf(urlGetRecord, serviceName, zoneName)
+
 	req, err := http.NewRequest("GET", urlRecord, nil)
 	if err != nil {
 		klog.Errorf("Message: %s", err)
 	}
 
-	header := fmt.Sprintf("Bearer %s", c.token)
+	header := fmt.Sprintf("Bearer %s", accessToken)
 
 	req.Header.Add("Authorization", header)
 	res, err := http.DefaultClient.Do(req)
@@ -36,7 +39,6 @@ func (c *NicruClient) getRecord(serviceName, zoneName, recordName string) string
 			for j := 0; j < len(zone.Data.Zone[i].RR); j++ {
 				if zone.Data.Zone[i].RR[j].Name == recordName {
 					rrId := zone.Data.Zone[i].RR[j].ID
-					klog.Infof("rrId = %v", rrId)
 					return rrId
 				}
 			}

@@ -8,16 +8,18 @@ import (
 	"net/http"
 )
 
-func (c *NicruClient) Commit(serviceName, zoneName string) {
+func (c *nicruDNSProviderSolver) Commit(serviceName, zoneName string) {
 	var response Response
-	url := fmt.Sprintf("%sservices/%s/zones/%s/commit", urlApi, serviceName, zoneName)
+	_, accessToken := c.getSecretData()
+
+	url := fmt.Sprintf(urlCommit, serviceName, zoneName)
 
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		klog.Errorf("Error: %s", err)
 	}
 
-	header := fmt.Sprintf("Bearer %s", c.token)
+	header := fmt.Sprintf("Bearer %s", accessToken)
 	req.Header.Add("Authorization", header)
 	req.Header.Add("content-type", "application/x-www-form-urlencoded")
 

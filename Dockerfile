@@ -9,6 +9,6 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o webhook -ldflags '-w -extl
 
 
 FROM debian:buster-slim
-RUN DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install ca-certificates -y
+RUN DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install ca-certificates curl -y
 COPY --from=build_deps /src/webhook /usr/local/bin/webhook
 ENTRYPOINT ["webhook"]

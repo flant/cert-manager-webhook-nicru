@@ -8,9 +8,11 @@ import (
 	"net/http"
 )
 
-func (c *NicruClient) getZoneInfo(zoneName string) (name string, service string) {
+func (c *nicruDNSProviderSolver) getZoneInfo(zoneName string) (name string, service string) {
 	var zone Zone
-	url := fmt.Sprintf("%szones/?token=%s", urlApi, c.token)
+	_, accessToken := c.getSecretData()
+	url := fmt.Sprintf(urlGetZoneInfo, accessToken)
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		klog.Errorf("Error: %s", err)
@@ -30,12 +32,8 @@ func (c *NicruClient) getZoneInfo(zoneName string) (name string, service string)
 	}
 	for i := 0; i < len(zone.Data.Zone); i++ {
 		if zone.Data.Zone[i].Name == zoneName {
-			id := zone.Data.Zone[i].ID
 			name = zone.Data.Zone[i].Name
 			service = zone.Data.Zone[i].Service
-			klog.Infof("ZoneId=%s", id)
-			klog.Infof("ZoneName=%s", name)
-			klog.Infof("Service=%s", service)
 		}
 	}
 	return

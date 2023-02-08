@@ -9,11 +9,12 @@ import (
 	"net/http"
 )
 
-func (c *NicruClient) createRecord(request *Request, serviceName, zoneName string) string {
+func (c *nicruDNSProviderSolver) createRecord(request *Request, serviceName, zoneName string) string {
 
 	var zone Zone
+	_, accessToken := c.getSecretData()
 
-	url := fmt.Sprintf("%sservices/%s/zones/%s/records", urlApi, serviceName, zoneName)
+	url := fmt.Sprintf(urlCreateRecord, serviceName, zoneName)
 
 	payload, err := xml.MarshalIndent(request, "", "")
 	if err != nil {
@@ -26,7 +27,7 @@ func (c *NicruClient) createRecord(request *Request, serviceName, zoneName strin
 	if err != nil {
 		klog.Errorf("Error: %s", err)
 	}
-	header := fmt.Sprintf("Bearer %s", c.token)
+	header := fmt.Sprintf("Bearer %s", accessToken)
 
 	req.Header.Add("Authorization", header)
 	req.Header.Add("content-type", "application/x-www-form-urlencoded")
@@ -50,7 +51,7 @@ func (c *NicruClient) createRecord(request *Request, serviceName, zoneName strin
 	rrId := zone.Data.Zone[0].RR[0].ID
 	if zone.Status == "success" {
 		klog.Infof("Record successfully added. rrId=%s", rrId)
-		nicruClient.Commit(serviceName, zoneName)
+		c.Commit(serviceName, zoneName)
 	} else {
 		klog.Error("Record has not created")
 	}

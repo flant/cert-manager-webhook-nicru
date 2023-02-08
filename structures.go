@@ -2,8 +2,11 @@ package main
 
 import "encoding/xml"
 
-type NicruClient struct {
-	token string
+type NicruTokens struct {
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
 }
 
 type Request struct {
