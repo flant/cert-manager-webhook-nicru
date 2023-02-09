@@ -36,13 +36,11 @@ func main() {
 	if GroupName == "" {
 		panic("GROUP_NAME must be specified")
 	}
-	
+
 	c := nicruDNSProviderSolver{}
 	go c.cronUpdateToken()
 
-	cmd.RunWebhookServer(GroupName,
-		&nicruDNSProviderSolver{},
-	)
+	cmd.RunWebhookServer(GroupName, &c)
 }
 
 type nicruDNSProviderSolver struct {
