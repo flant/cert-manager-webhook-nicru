@@ -1,0 +1,31 @@
+groupName: acme.nicru.ru
+
+certManager:
+  namespace: changeme
+  serviceAccountName: cert-manager
+
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 443
+
+webhook:
+  hostNetwork: true
+  image: ghcr.io/flant/cert-manager-webhook-nicru:latest
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
