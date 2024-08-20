@@ -30,10 +30,6 @@ spec:
           env:
             - name: GROUP_NAME
               value: {{ .Values.groupName }}
-            - name: APP_ID
-              value: {{ .Values.webhook.appId }}
-            - name: APP_SECRET
-              value: {{ .Values.webhook.appSecret }}
             - name: NAMESPACE
               valueFrom:
                 fieldRef:

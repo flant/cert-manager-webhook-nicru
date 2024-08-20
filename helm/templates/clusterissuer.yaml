@@ -4,7 +4,7 @@ metadata:
   name: nicru-dns
 spec:
   acme:
-    email: mail@example.com
+    email: ssl@nic.ru
     server: https://acme-v02.api.letsencrypt.org/directory
     privateKeySecretRef:
       name: cert-manager-letsencrypt-private-key

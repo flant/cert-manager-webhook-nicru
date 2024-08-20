@@ -1,14 +1,13 @@
-FROM golang:1.19.5-buster AS build_deps
+FROM golang:1.22.3-alpine AS build
+RUN apk add --no-cache git
 WORKDIR /src
-RUN DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install git -y
 ENV GO111MODULE=on
 COPY . .
-RUN ls -la /src
 RUN go mod download
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o webhook -ldflags '-w -extldflags "-static"' .
+RUN CGO_ENABLED=0 go build -o webhook -ldflags '-w -extldflags "-static"' .
 
-
-FROM debian:buster-slim
-RUN DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install ca-certificates curl -y
-COPY --from=build_deps /src/webhook /usr/local/bin/webhook
+# ------------------------------
+FROM alpine:3.14.2
+RUN apk add --no-cache ca-certificates
+COPY --from=build /src/webhook /usr/local/bin/webhook
 ENTRYPOINT ["webhook"]

@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -8,11 +9,35 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
 ---
-# Grant permissions to read secrets inside the cluster to allow to have issuer in another namespace than the webhook
+# Grant the webhook permission to read the ConfigMap containing the Kubernetes
+# apiserver's requestheader-ca-certificate.
+# This ConfigMap is automatically created by the Kubernetes apiserver.
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: RoleBinding
 metadata:
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}:secrets-reader
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}
+  namespace: {{ .Values.certManager.namespace }}
+  labels:
+    app: {{ include "cert-manager-webhook-nicru.name" . }}
+    chart: {{ include "cert-manager-webhook-nicru.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: {{ include "cert-manager-webhook-nicru.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+---
+# Grant cert-manager permission to validate using our apiserver
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}
+  namespace: {{ .Values.certManager.namespace }}
   labels:
     app: {{ include "cert-manager-webhook-nicru.name" . }}
     chart: {{ include "cert-manager-webhook-nicru.chart" . }}
@@ -22,31 +47,12 @@ rules:
   - apiGroups:
       - ''
     resources:
-      - '*'
+      - 'secrets'
     verbs:
       - 'get'
       - 'list'
       - 'watch'
----
-# Bind the previously created role to the webhook service account to allow reading from secrets in all namespaces
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}:secrets-reader
-  labels:
-    app: {{ include "cert-manager-webhook-nicru.name" . }}
-    chart: {{ include "cert-manager-webhook-nicru.chart" . }}
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}:secrets-reader
-subjects:
-  - apiGroup: ""
-    kind: ServiceAccount
-    name: {{ include "cert-manager-webhook-nicru.fullname" . }}
-    namespace: {{ .Release.Namespace }}
+      - 'patch'
 ---
 # Grant the webhook permission to read the ConfigMap containing the Kubernetes
 # apiserver's requestheader-ca-certificate.
@@ -54,7 +60,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}:webhook-authentication-reader
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-webhook-authentication-reader
   namespace: kube-system
   labels:
     app: {{ include "cert-manager-webhook-nicru.name" . }}
@@ -76,7 +82,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}:auth-delegator
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-auth-delegator
   labels:
     app: {{ include "cert-manager-webhook-nicru.name" . }}
     chart: {{ include "cert-manager-webhook-nicru.chart" . }}
@@ -96,7 +102,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}:domain-solver
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-domain-solver
   labels:
     app: {{ include "cert-manager-webhook-nicru.name" . }}
     chart: {{ include "cert-manager-webhook-nicru.chart" . }}
@@ -109,12 +115,11 @@ rules:
       - '*'
     verbs:
       - 'create'
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}:domain-solver
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-domain-solver
   labels:
     app: {{ include "cert-manager-webhook-nicru.name" . }}
     chart: {{ include "cert-manager-webhook-nicru.chart" . }}
@@ -123,37 +128,48 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}:domain-solver
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-domain-solver
 subjects:
   - apiGroup: ""
     kind: ServiceAccount
     name: {{ .Values.certManager.serviceAccountName }}
     namespace: {{ .Values.certManager.namespace }}
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-update-secret
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-flowcontrol-solver
+  labels:
+    app: {{ include "cert-manager-webhook-nicru.name" . }}
+    chart: {{ include "cert-manager-webhook-nicru.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
 rules:
   - apiGroups:
-      - ""
+      - "flowcontrol.apiserver.k8s.io"
     resources:
-      - secrets
+      - 'prioritylevelconfigurations'
+      - 'flowschemas'
     verbs:
-      - 'get'
       - 'list'
       - 'watch'
-      - 'patch'
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-update-secret
-subjects:
-  - kind: ServiceAccount
-    name: {{ include "cert-manager-webhook-nicru.fullname" . }}
-    namespace: {{ .Release.Namespace }}
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-flowcontrol-solver
+  labels:
+    app: {{ include "cert-manager-webhook-nicru.name" . }}
+    chart: {{ include "cert-manager-webhook-nicru.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-update-secret
+  name: {{ include "cert-manager-webhook-nicru.fullname" . }}-flowcontrol-solver
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: {{ include "cert-manager-webhook-nicru.fullname" . }}
+    namespace: {{ .Release.Namespace | quote }}
