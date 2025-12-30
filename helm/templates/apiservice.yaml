@@ -13,7 +13,9 @@ spec:
   group: {{ .Values.groupName }}
   groupPriorityMinimum: 1000
   versionPriority: 15
-  insecureSkipTLSVerify: true
+  {{- if .Values.apiservice.insecureSkipTLSVerify }}
+  insecureSkipTLSVerify: {{ .Values.apiservice.insecureSkipTLSVerify }}
+  {{- end }}
   service:
     name: {{ include "cert-manager-webhook-nicru.fullname" . }}
     namespace: {{ .Release.Namespace }}

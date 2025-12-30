@@ -24,6 +24,7 @@ spec:
       containers:
         - name: {{ .Chart.Name }}
           image: {{ .Values.webhook.image }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.webhook.imagePullPolicy }}
           args:
             - --tls-cert-file=/tls/tls.crt
             - --tls-private-key-file=/tls/tls.key
@@ -43,11 +44,19 @@ spec:
               scheme: HTTPS
               path: /healthz
               port: https
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               scheme: HTTPS
               path: /healthz
               port: https
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: certs
               mountPath: /tls
@@ -62,15 +71,15 @@ spec:
         - name: certs
           secret:
             secretName: {{ include "cert-manager-webhook-nicru.servingCertificate" . }}
-    {{- with .Values.nodeSelector }}
+      {{- with .Values.nodeSelector }}
       nodeSelector:
-{{ toYaml . | indent 8 }}
-    {{- end }}
-    {{- with .Values.affinity }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
       affinity:
-{{ toYaml . | indent 8 }}
-    {{- end }}
-    {{- with .Values.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
       tolerations:
-{{ toYaml . | indent 8 }}
-    {{- end }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

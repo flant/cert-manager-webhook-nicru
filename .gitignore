@@ -1,1 +1,15 @@
 .idea/*
+
+# Integration test credentials - NEVER commit!
+test-credentials.env
+*.env
+!test-credentials.example.env
+
+# Test coverage files
+coverage.out
+coverage.html
+*.coverprofile
+
+# Build artifacts (binary executables in root directory only)
+/webhook
+/cert-manager-webhook-nicru

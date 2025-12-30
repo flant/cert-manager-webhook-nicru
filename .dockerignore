@@ -1,0 +1,58 @@
+# Git files
+.git
+.gitignore
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+
+# Test files and credentials
+tests/
+*_test.go
+test-credentials.env
+test-credentials.example.env
+*.env
+!.env.example
+
+# Test coverage
+coverage.out
+coverage.html
+*.coverprofile
+
+# Build artifacts (binary executables in root directory only)
+/webhook
+/cert-manager-webhook-nicru
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Kubernetes/Helm charts (not needed in container)
+helm/
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Dependency directories
+vendor/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+*.orig

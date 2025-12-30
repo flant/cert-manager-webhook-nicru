@@ -1,27 +1,30 @@
-package main
+package dns
 
 import (
 	"encoding/xml"
+	"errors"
 )
 
-type NicruTokens struct {
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int    `json:"expires_in"`
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-}
+// Sentinel errors
+var (
+	// ErrRecordNotFound indicates that the requested DNS record was not found
+	ErrRecordNotFound = errors.New("DNS record not found")
+)
 
+// Request represents DNS record request to NIC.RU API
 type Request struct {
 	XMLName xml.Name `xml:"request"`
 	Text    string   `xml:",chardata"`
 	RrList  *RrList  `xml:"rr-list"`
 }
 
+// RrList contains list of resource records
 type RrList struct {
 	Text string `xml:",chardata"`
 	Rr   []*Rr  `xml:"rr"`
 }
 
+// Rr represents a single DNS resource record
 type Rr struct {
 	Text string     `xml:",chardata"`
 	ID   string     `xml:"id,attr,omitempty"`
@@ -31,11 +34,13 @@ type Rr struct {
 	Txt  *TxtRecord `xml:"txt"`
 }
 
+// TxtRecord represents TXT record data
 type TxtRecord struct {
 	Text   string `xml:",chardata" json:"text,omitempty"`
 	String string `xml:"string" json:"string,omitempty"`
 }
 
+// Response represents generic API response
 type Response struct {
 	XMLName xml.Name `xml:"response"`
 	Text    string   `xml:",chardata"`
@@ -49,6 +54,7 @@ type Response struct {
 	} `xml:"errors"`
 }
 
+// Zone represents DNS zone response from NIC.RU API
 type Zone struct {
 	XMLName xml.Name `xml:"response"`
 	Text    string   `xml:",chardata"`
