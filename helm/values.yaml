@@ -20,7 +20,8 @@ apiservice:
   insecureSkipTLSVerify: false
 
 webhook:
-  hostNetwork: true
+  # Webhook apiserver secure port inside the container.
+  securePort: 8443
   image: ghcr.io/flant/cert-manager-webhook-nicru:latest
   imagePullPolicy: IfNotPresent
 

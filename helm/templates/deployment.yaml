@@ -21,11 +21,24 @@ spec:
         release: {{ .Release.Name }}
     spec:
       serviceAccountName: {{ include "cert-manager-webhook-nicru.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: {{ .Chart.Name }}
           image: {{ .Values.webhook.image }}
           imagePullPolicy: {{ default "IfNotPresent" .Values.webhook.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           args:
+            - --secure-port={{ .Values.webhook.securePort }}
             - --tls-cert-file=/tls/tls.crt
             - --tls-private-key-file=/tls/tls.key
           env:
@@ -37,7 +50,7 @@ spec:
                   fieldPath: metadata.namespace
           ports:
             - name: https
-              containerPort: 443
+              containerPort: {{ .Values.webhook.securePort }}
               protocol: TCP
           livenessProbe:
             httpGet:
