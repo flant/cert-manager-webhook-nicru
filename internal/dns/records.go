@@ -1,4 +1,4 @@
-package main
+package dns
 
 import (
 	"bytes"
@@ -7,10 +7,12 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/flant/cert-manager-webhook-nicru/internal/config"
 	"k8s.io/klog/v2"
 )
 
-func (c *DNSProviderSolver) Txt(recordName, serviceName, zoneName, content string) error {
+// CreateTXTRecord creates a TXT record for ACME challenge
+func (c *Client) CreateTXTRecord(recordName, serviceName, zoneName, content string) error {
 	var record = &Request{
 		RrList: &RrList{
 			Rr: []*Rr{},
@@ -22,7 +24,9 @@ func (c *DNSProviderSolver) Txt(recordName, serviceName, zoneName, content strin
 		TTL:  60,
 		Type: "TXT",
 		Txt: &TxtRecord{
-			String: content}})
+			String: content,
+		},
+	})
 
 	err := c.createRecord(record, serviceName, zoneName)
 	if err != nil {
@@ -32,11 +36,14 @@ func (c *DNSProviderSolver) Txt(recordName, serviceName, zoneName, content strin
 	return nil
 }
 
-func (c *DNSProviderSolver) createRecord(request *Request, serviceName, zoneName string) error {
+func (c *Client) createRecord(request *Request, serviceName, zoneName string) error {
 	var zone Zone
-	accessToken := c.getAccessToken()
+	accessToken, err := c.tokenManager.GetCurrentAccessToken()
+	if err != nil {
+		return fmt.Errorf("failed to get access token: %w", err)
+	}
 
-	url := fmt.Sprintf(urlCreateRecord, serviceName, zoneName)
+	url := fmt.Sprintf(config.URLCreateRecord, serviceName, zoneName)
 
 	payload, err := xml.MarshalIndent(request, "", "")
 	if err != nil {
@@ -53,7 +60,7 @@ func (c *DNSProviderSolver) createRecord(request *Request, serviceName, zoneName
 	req.Header.Add("Authorization", header)
 	req.Header.Add("content-type", "application/x-www-form-urlencoded")
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -68,12 +75,18 @@ func (c *DNSProviderSolver) createRecord(request *Request, serviceName, zoneName
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal body: %w", err)
 	}
-	rrID := zone.Data.Zone[0].RR[0].ID
+
 	if zone.Status != "success" {
-		return fmt.Errorf("failed to create record: status does not indicate success")
+		return fmt.Errorf("failed to create record: status=%s", zone.Status)
 	}
 
-	err = c.Commit(serviceName, zoneName)
+	if len(zone.Data.Zone) == 0 || len(zone.Data.Zone[0].RR) == 0 {
+		return fmt.Errorf("no resource records returned from API")
+	}
+
+	rrID := zone.Data.Zone[0].RR[0].ID
+
+	err = c.CommitZone(serviceName, zoneName)
 	if err != nil {
 		return fmt.Errorf("failed to commit the zone: %w", err)
 	}
@@ -81,11 +94,15 @@ func (c *DNSProviderSolver) createRecord(request *Request, serviceName, zoneName
 	return nil
 }
 
-func (c *DNSProviderSolver) getRecord(serviceName, zoneName, recordName string) (string, error) {
+// GetRecord retrieves a DNS record ID by name
+func (c *Client) GetRecord(serviceName, zoneName, recordName string) (string, error) {
 	var zone Zone
-	accessToken := c.getAccessToken()
+	accessToken, err := c.tokenManager.GetCurrentAccessToken()
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
 
-	urlRecord := fmt.Sprintf(urlGetRecord, serviceName, zoneName)
+	urlRecord := fmt.Sprintf(config.URLGetRecord, serviceName, zoneName)
 
 	req, err := http.NewRequest(http.MethodGet, urlRecord, nil)
 	if err != nil {
@@ -94,7 +111,7 @@ func (c *DNSProviderSolver) getRecord(serviceName, zoneName, recordName string) 
 
 	header := fmt.Sprintf("Bearer %s", accessToken)
 	req.Header.Add("Authorization", header)
-	res, err := http.DefaultClient.Do(req)
+	res, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
@@ -120,15 +137,19 @@ func (c *DNSProviderSolver) getRecord(serviceName, zoneName, recordName string) 
 	}
 
 	if rrID == "" {
-		return "", fmt.Errorf("record not found")
+		return "", ErrRecordNotFound
 	}
 	return rrID, nil
 }
 
-func (c *DNSProviderSolver) deleteRecord(serviceName, zoneName, rrID string) error {
+// DeleteRecord deletes a DNS record by ID
+func (c *Client) DeleteRecord(serviceName, zoneName, rrID string) error {
 	var response Response
-	accessToken := c.getAccessToken()
-	url := fmt.Sprintf(urlDeleteRecord, serviceName, zoneName, rrID)
+	accessToken, err := c.tokenManager.GetCurrentAccessToken()
+	if err != nil {
+		return fmt.Errorf("failed to get access token: %w", err)
+	}
+	url := fmt.Sprintf(config.URLDeleteRecord, serviceName, zoneName, rrID)
 
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
@@ -138,7 +159,7 @@ func (c *DNSProviderSolver) deleteRecord(serviceName, zoneName, rrID string) err
 	header := fmt.Sprintf("Bearer %s", accessToken)
 	req.Header.Add("Authorization", header)
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -151,55 +172,22 @@ func (c *DNSProviderSolver) deleteRecord(serviceName, zoneName, rrID string) err
 
 	err = xml.Unmarshal(body, &response)
 	if err != nil {
-		return fmt.Errorf("failed to unmarhal body: %w", err)
+		return fmt.Errorf("failed to unmarshal body: %w", err)
 	}
 	if response.Status != "success" {
-		return fmt.Errorf("return fmt.Errorf")
+		// Check if error is "record not found" (error code 4035)
+		if response.Errors.Error.Code == "4035" {
+			klog.Infof("Record already deleted (rrID=%s), skipping", rrID)
+			return nil // Idempotent: already deleted is success
+		}
+		return fmt.Errorf("failed to delete record: status=%s, error=%s", response.Status, response.Errors.Error.Text)
 	}
 
-	err = c.Commit(serviceName, zoneName)
+	err = c.CommitZone(serviceName, zoneName)
 	if err != nil {
 		return fmt.Errorf("failed to commit the zone: %w", err)
 	}
 
 	klog.Infof("Record successfully deleted")
-	return nil
-}
-
-func (c *DNSProviderSolver) Commit(serviceName, zoneName string) error {
-	var response Response
-	accessToken := c.getAccessToken()
-
-	url := fmt.Sprintf(urlCommit, serviceName, zoneName)
-
-	req, err := http.NewRequest(http.MethodPost, url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to generate request: %w", err)
-	}
-
-	header := fmt.Sprintf("Bearer %s", accessToken)
-	req.Header.Add("Authorization", header)
-	req.Header.Add("content-type", "application/x-www-form-urlencoded")
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read body: %w", err)
-	}
-
-	err = xml.Unmarshal(body, &response)
-	if err != nil {
-		return fmt.Errorf("failed to unmarhal body: %w", err)
-	}
-
-	if response.Status != "success" {
-		return fmt.Errorf("commit zone failed: %w", err)
-	}
-
 	return nil
 }

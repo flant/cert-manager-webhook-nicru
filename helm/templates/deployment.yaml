@@ -21,10 +21,24 @@ spec:
         release: {{ .Release.Name }}
     spec:
       serviceAccountName: {{ include "cert-manager-webhook-nicru.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: {{ .Chart.Name }}
           image: {{ .Values.webhook.image }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.webhook.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           args:
+            - --secure-port={{ .Values.webhook.securePort }}
             - --tls-cert-file=/tls/tls.crt
             - --tls-private-key-file=/tls/tls.key
           env:
@@ -36,18 +50,26 @@ spec:
                   fieldPath: metadata.namespace
           ports:
             - name: https
-              containerPort: 443
+              containerPort: {{ .Values.webhook.securePort }}
               protocol: TCP
           livenessProbe:
             httpGet:
               scheme: HTTPS
               path: /healthz
               port: https
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               scheme: HTTPS
               path: /healthz
               port: https
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: certs
               mountPath: /tls
@@ -62,15 +84,15 @@ spec:
         - name: certs
           secret:
             secretName: {{ include "cert-manager-webhook-nicru.servingCertificate" . }}
-    {{- with .Values.nodeSelector }}
+      {{- with .Values.nodeSelector }}
       nodeSelector:
-{{ toYaml . | indent 8 }}
-    {{- end }}
-    {{- with .Values.affinity }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
       affinity:
-{{ toYaml . | indent 8 }}
-    {{- end }}
-    {{- with .Values.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
       tolerations:
-{{ toYaml . | indent 8 }}
-    {{- end }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

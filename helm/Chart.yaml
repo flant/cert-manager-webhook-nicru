@@ -1,2 +1,11 @@
+apiVersion: v2
 name: certmanager-webhook-nicru
-version: 1.0.0
+description: cert-manager webhook for NIC.RU DNS
+type: application
+version: 2.0.0
+appVersion: "1.19.1"
+keywords:
+  - cert-manager
+  - webhook
+  - dns01
+  - nicru

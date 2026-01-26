@@ -13,9 +13,23 @@ service:
   type: ClusterIP
   port: 443
 
+apiservice:
+  # Skip TLS verification for APIService connection
+  # Set to true if you encounter TLS certificate validation errors
+  # WARNING: This is insecure and should only be used for troubleshooting
+  insecureSkipTLSVerify: false
+
 webhook:
-  hostNetwork: true
+  # Webhook apiserver secure port inside the container.
+  securePort: 8443
   image: ghcr.io/flant/cert-manager-webhook-nicru:latest
+  imagePullPolicy: IfNotPresent
+
+# IMPORTANT: Secret names are hardcoded in the application and cannot be changed.
+# The webhook expects the following secrets to exist in the same namespace:
+#   - "nicru-account"  : Contains NIC.RU credentials (USERNAME, PASSWORD, CLIENT_ID, CLIENT_SECRET)
+#   - "nicru-tokens"   : Automatically managed by webhook (ACCESS_TOKEN, REFRESH_TOKEN, APP_ID, APP_SECRET)
+# See docs/features/AUTOMATED_TOKENS.md for details on secret management.
 
 resources:
   requests:
