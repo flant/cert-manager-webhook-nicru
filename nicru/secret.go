@@ -151,16 +151,19 @@ func (s *Solver) startupTokenCheck() (int, error) {
 		s.logger.Warn("access token is invalid or expired, will try to refresh",
 			"error", err.Error(),
 		)
-		expiresIn, refreshErr := s.refreshTokensWithExpiry()
-		if refreshErr != nil {
-			return 0, refreshErr
-		}
-		s.logger.Info("token refreshed successfully on startup, webhook is ready")
-		return expiresIn, nil
+	} else {
+		s.logger.Info("current access token is valid")
 	}
 
-	s.logger.Info("access token is valid, webhook is ready")
-	return 14400, nil
+	s.logger.Info("refreshing tokens on startup to get a fresh token and known expiry")
+	expiresIn, err := s.refreshTokensWithExpiry()
+	if err != nil {
+		return 0, err
+	}
+	s.logger.Info("tokens refreshed on startup, webhook is ready",
+		"expires_in", expiresIn,
+	)
+	return expiresIn, nil
 }
 
 func (s *Solver) validateToken() error {
