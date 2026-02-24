@@ -26,6 +26,14 @@ type Rr struct {
 	TTL     int             `xml:"ttl,omitempty"`
 	Type    string          `xml:"type"`
 	Txt     *TxtRecord      `xml:"txt,omitempty"`
+	Soa     *RawXMLElement  `xml:"soa,omitempty"`
+	Ns      *RawXMLElement  `xml:"ns,omitempty"`
+	A       *RawXMLElement  `xml:"a,omitempty"`
+	Aaaa    *RawXMLElement  `xml:"aaaa,omitempty"`
+	Cname   *RawXMLElement  `xml:"cname,omitempty"`
+	Mx      *RawXMLElement  `xml:"mx,omitempty"`
+	Srv     *RawXMLElement  `xml:"srv,omitempty"`
+	Ptr     *RawXMLElement  `xml:"ptr,omitempty"`
 	Extra   []RawXMLElement `xml:",any"`
 }
 
