@@ -6,10 +6,32 @@ import (
 
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
 	"github.com/flant/cert-manager-webhook-nicru/nicru"
-	_ "k8s.io/component-base/logs/json/register"
+	"github.com/go-logr/logr"
+	logsapi "k8s.io/component-base/logs/api/v1"
 )
 
 var appVersion string
+
+type slogJSONFactory struct{}
+
+func (slogJSONFactory) Create(_ logsapi.LoggingConfiguration, o logsapi.LoggingOptions) (logr.Logger, logsapi.RuntimeControl) {
+	w := o.ErrorStream
+	if w == nil {
+		w = os.Stderr
+	}
+	handler := slog.NewJSONHandler(w, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	return logr.FromSlogHandler(handler), logsapi.RuntimeControl{
+		Flush: func() {},
+	}
+}
+
+func init() {
+	if err := logsapi.RegisterLogFormat("slog-json", slogJSONFactory{}, logsapi.LoggingStableOptions); err != nil {
+		panic(err)
+	}
+}
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
@@ -40,7 +62,7 @@ func main() {
 		secretName = nicru.DefaultSecretName
 	}
 
-	os.Args = append(os.Args, "--logging-format=json")
+	os.Args = append(os.Args, "--logging-format=slog-json")
 
 	solver := nicru.NewSolver(namespace, secretName, logger)
 
