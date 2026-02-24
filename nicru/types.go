@@ -20,12 +20,13 @@ type RrList struct {
 }
 
 type Rr struct {
-	ID    string          `xml:"id,attr,omitempty"`
-	Name  string          `xml:"name"`
-	TTL   int             `xml:"ttl,omitempty"`
-	Type  string          `xml:"type"`
-	Txt   *TxtRecord      `xml:"txt,omitempty"`
-	Extra []RawXMLElement `xml:",any"`
+	ID      string          `xml:"id,attr,omitempty"`
+	Name    string          `xml:"name"`
+	IdnName string          `xml:"idn-name,omitempty"`
+	TTL     int             `xml:"ttl,omitempty"`
+	Type    string          `xml:"type"`
+	Txt     *TxtRecord      `xml:"txt,omitempty"`
+	Extra   []RawXMLElement `xml:",any"`
 }
 
 type TxtRecord struct {

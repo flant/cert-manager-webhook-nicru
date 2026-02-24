@@ -53,7 +53,7 @@ func (c *Client) doRequest(method, path, token, contentType string, body io.Read
 		req.Header.Set("Content-Type", contentType)
 	}
 
-	c.logger.Info("api_request", "method", method, "path", path)
+	c.logger.Info("sending API request", "method", method, "path", path)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -66,11 +66,16 @@ func (c *Client) doRequest(method, path, token, contentType string, body io.Read
 		return nil, resp.StatusCode, fmt.Errorf("read response body: %w", err)
 	}
 
-	c.logger.Info("api_response",
+	logBody := string(respBody)
+	if strings.Contains(path, "oauth") {
+		logBody = redactTokensInJSON(logBody)
+	}
+
+	c.logger.Info("received API response",
 		"method", method,
 		"path", path,
 		"status_code", resp.StatusCode,
-		"response_body", string(respBody),
+		"response_body", logBody,
 	)
 
 	return respBody, resp.StatusCode, nil
@@ -112,18 +117,22 @@ func (c *Client) parseXMLResponse(data []byte) (*APIResponse, error) {
 
 func (c *Client) logUnknownFields(resp *APIResponse) {
 	if names := extraFieldNames(resp.Extra); names != nil {
-		c.logger.Warn("unknown_xml_fields", "context", "response", "fields", names)
+		c.logger.Warn("nic.ru API returned unknown XML elements in response", "fields", names)
 	}
 	if names := extraFieldNames(resp.Data.Extra); names != nil {
-		c.logger.Warn("unknown_xml_fields", "context", "response.data", "fields", names)
+		c.logger.Warn("nic.ru API returned unknown XML elements in data", "fields", names)
 	}
-	for i, z := range resp.Data.Zones {
+	for _, z := range resp.Data.Zones {
 		if names := extraFieldNames(z.Extra); names != nil {
-			c.logger.Warn("unknown_xml_fields", "context", "zone", "zone_index", i, "zone_name", z.Name, "fields", names)
+			c.logger.Warn("nic.ru API returned unknown XML elements in zone",
+				"zone", z.Name, "fields", names,
+			)
 		}
-		for j, rr := range z.Records {
+		for _, rr := range z.Records {
 			if names := extraFieldNames(rr.Extra); names != nil {
-				c.logger.Warn("unknown_xml_fields", "context", "rr", "zone_name", z.Name, "rr_index", j, "rr_name", rr.Name, "fields", names)
+				c.logger.Warn("nic.ru API returned unknown XML elements in record",
+					"zone", z.Name, "record", rr.Name, "fields", names,
+				)
 			}
 		}
 	}
@@ -145,9 +154,9 @@ func (c *Client) GetServiceForZone(token, zoneName string) (string, error) {
 	for _, z := range resp.Data.Zones {
 		available = append(available, z.Name)
 	}
-	c.logger.Info("zones_listed",
+	c.logger.Info("fetched zone list from nic.ru",
 		"total", len(resp.Data.Zones),
-		"available_zones", available,
+		"zones", available,
 		"looking_for", zoneName,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
@@ -177,10 +186,10 @@ func (c *Client) CreateTXTRecord(token, service, zone, name, value string, ttl i
 		},
 	}
 
-	c.logger.Info("create_record_sending",
+	c.logger.Info("creating TXT record via nic.ru API",
 		"service", service,
 		"zone", zone,
-		"record_name", name,
+		"record", name,
 		"ttl", ttl,
 	)
 
@@ -200,19 +209,19 @@ func (c *Client) CreateTXTRecord(token, service, zone, name, value string, ttl i
 		rrID = resp.Data.Zones[0].Records[0].ID
 	}
 
-	c.logger.Info("create_record_ok",
+	c.logger.Info("TXT record created, committing zone",
 		"rr_id", rrID,
 		"zone", zone,
-		"record_name", name,
+		"record", name,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 
-	c.logger.Info("commit_zone_starting", "service", service, "zone", zone)
 	if err := c.CommitZone(token, service, zone); err != nil {
 		return rrID, fmt.Errorf("commit after create: %w", err)
 	}
-	c.logger.Info("commit_zone_done",
-		"service", service,
+
+	c.logger.Info("zone committed, TXT record is live",
+		"rr_id", rrID,
 		"zone", zone,
 		"total_duration_ms", time.Since(start).Milliseconds(),
 	)
@@ -223,10 +232,10 @@ func (c *Client) CreateTXTRecord(token, service, zone, name, value string, ttl i
 func (c *Client) FindTXTRecord(token, service, zone, name, content string) (string, error) {
 	start := time.Now()
 
-	c.logger.Info("find_record_searching",
+	c.logger.Info("searching for TXT record in zone",
 		"service", service,
 		"zone", zone,
-		"record_name", name,
+		"record", name,
 		"match_content", content != "",
 	)
 
@@ -251,9 +260,9 @@ func (c *Client) FindTXTRecord(token, service, zone, name, content string) (stri
 			if rr.Name == name && rr.Type == "TXT" {
 				nameMatches++
 				if content == "" {
-					c.logger.Info("find_record_found",
+					c.logger.Info("found TXT record by name",
 						"rr_id", rr.ID,
-						"record_name", name,
+						"record", name,
 						"total_records", totalRecords,
 						"txt_records", txtRecords,
 						"duration_ms", time.Since(start).Milliseconds(),
@@ -263,10 +272,9 @@ func (c *Client) FindTXTRecord(token, service, zone, name, content string) (stri
 				if rr.Txt != nil {
 					for _, s := range rr.Txt.Strings {
 						if s == content {
-							c.logger.Info("find_record_found",
+							c.logger.Info("found TXT record by name and content",
 								"rr_id", rr.ID,
-								"record_name", name,
-								"matched_by", "name+content",
+								"record", name,
 								"total_records", totalRecords,
 								"txt_records", txtRecords,
 								"duration_ms", time.Since(start).Milliseconds(),
@@ -279,8 +287,8 @@ func (c *Client) FindTXTRecord(token, service, zone, name, content string) (stri
 		}
 	}
 
-	c.logger.Warn("find_record_not_found",
-		"record_name", name,
+	c.logger.Warn("TXT record not found in zone",
+		"record", name,
 		"zone", zone,
 		"total_records", totalRecords,
 		"txt_records", txtRecords,
@@ -294,10 +302,9 @@ func (c *Client) FindTXTRecord(token, service, zone, name, content string) (stri
 func (c *Client) DeleteRecord(token, service, zone, rrID string) error {
 	start := time.Now()
 
-	c.logger.Info("delete_record_sending",
-		"service", service,
-		"zone", zone,
+	c.logger.Info("deleting record from nic.ru",
 		"rr_id", rrID,
+		"zone", zone,
 	)
 
 	path := fmt.Sprintf(recordPath, service, zone, rrID)
@@ -310,18 +317,18 @@ func (c *Client) DeleteRecord(token, service, zone, rrID string) error {
 		return err
 	}
 
-	c.logger.Info("delete_record_ok",
+	c.logger.Info("record deleted, committing zone",
 		"rr_id", rrID,
 		"zone", zone,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 
-	c.logger.Info("commit_zone_starting", "service", service, "zone", zone)
 	if err := c.CommitZone(token, service, zone); err != nil {
 		return fmt.Errorf("commit after delete: %w", err)
 	}
-	c.logger.Info("commit_zone_done",
-		"service", service,
+
+	c.logger.Info("zone committed, record removal is live",
+		"rr_id", rrID,
 		"zone", zone,
 		"total_duration_ms", time.Since(start).Milliseconds(),
 	)
@@ -355,7 +362,7 @@ func (c *Client) RefreshToken(clientID, clientSecret, refreshToken string) (*Tok
 	}
 
 	if statusCode != http.StatusOK {
-		return nil, fmt.Errorf("refresh token: status %d, body: %s", statusCode, redactTokensInJSON(string(body)))
+		return nil, fmt.Errorf("refresh token failed: HTTP %d, body: %s", statusCode, redactTokensInJSON(string(body)))
 	}
 
 	var token TokenResponse
@@ -363,7 +370,7 @@ func (c *Client) RefreshToken(clientID, clientSecret, refreshToken string) (*Tok
 		return nil, fmt.Errorf("unmarshal token response: %w", err)
 	}
 
-	c.logger.Info("token_refreshed",
+	c.logger.Info("received new tokens from nic.ru OAuth",
 		"token_type", token.TokenType,
 		"expires_in", token.ExpiresIn,
 	)
@@ -371,7 +378,7 @@ func (c *Client) RefreshToken(clientID, clientSecret, refreshToken string) (*Tok
 }
 
 func (c *Client) ValidateToken(token string) error {
-	c.logger.Info("token_validate_starting")
+	c.logger.Info("validating access token against nic.ru API")
 
 	body, statusCode, err := c.doXML(http.MethodGet, zonesPath, token, nil)
 	if err != nil {
@@ -390,8 +397,8 @@ func (c *Client) ValidateToken(token string) error {
 	for _, z := range resp.Data.Zones {
 		zones = append(zones, z.Name)
 	}
-	c.logger.Info("token_validate_ok",
-		"zones_visible", len(resp.Data.Zones),
+	c.logger.Info("token is valid, account has access to zones",
+		"zones_count", len(resp.Data.Zones),
 		"zones", zones,
 	)
 	return nil

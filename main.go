@@ -6,6 +6,7 @@ import (
 
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
 	"github.com/flant/cert-manager-webhook-nicru/nicru"
+	"k8s.io/klog/v2"
 )
 
 var appVersion string
@@ -20,6 +21,8 @@ func main() {
 	if version == "" {
 		version = "dev"
 	}
+	klog.SetSlogLogger(logger)
+
 	logger.Info("starting cert-manager-webhook-nicru", "version", version)
 
 	groupName := os.Getenv("GROUP_NAME")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -19,7 +20,7 @@ func (s *Solver) getAccessToken() (string, error) {
 		return "", fmt.Errorf("read secret %s/%s: %w", s.namespace, s.secretName, err)
 	}
 
-	token := string(secret.Data["ACCESS_TOKEN"])
+	token := strings.TrimSpace(string(secret.Data["ACCESS_TOKEN"]))
 	if token == "" {
 		return "", fmt.Errorf("ACCESS_TOKEN is empty in secret %s/%s", s.namespace, s.secretName)
 	}
@@ -34,7 +35,7 @@ func (s *Solver) getRefreshToken() (string, error) {
 		return "", fmt.Errorf("read secret %s/%s: %w", s.namespace, s.secretName, err)
 	}
 
-	token := string(secret.Data["REFRESH_TOKEN"])
+	token := strings.TrimSpace(string(secret.Data["REFRESH_TOKEN"]))
 	if token == "" {
 		return "", fmt.Errorf("REFRESH_TOKEN is empty in secret %s/%s", s.namespace, s.secretName)
 	}
@@ -49,8 +50,8 @@ func (s *Solver) getAppCredentials() (string, string, error) {
 		return "", "", fmt.Errorf("read secret %s/%s: %w", s.namespace, s.secretName, err)
 	}
 
-	appID := string(secret.Data["APP_ID"])
-	appSecret := string(secret.Data["APP_SECRET"])
+	appID := strings.TrimSpace(string(secret.Data["APP_ID"]))
+	appSecret := strings.TrimSpace(string(secret.Data["APP_SECRET"]))
 	if appID == "" || appSecret == "" {
 		return "", "", fmt.Errorf("APP_ID or APP_SECRET is empty in secret %s/%s", s.namespace, s.secretName)
 	}
@@ -81,17 +82,21 @@ func (s *Solver) patchTokenSecret(accessToken, refreshToken string) error {
 }
 
 func (s *Solver) runTokenManager(stopCh <-chan struct{}) {
-	s.logger.Info("token_manager_started")
+	s.logger.Info("token manager started, validating current access token")
 
 	if err := s.validateToken(); err != nil {
-		s.logger.Error("token_validation_failed", "error", err.Error())
+		s.logger.Warn("access token is invalid or expired, will try to refresh",
+			"error", err.Error(),
+		)
 		if err := s.refreshTokens(); err != nil {
-			s.logger.Error("token_refresh_failed_on_startup", "error", err.Error())
+			s.logger.Error("failed to refresh token on startup, webhook may not work until next retry",
+				"error", err.Error(),
+			)
 		} else {
-			s.logger.Info("token_refreshed_on_startup")
+			s.logger.Info("token refreshed successfully on startup, webhook is ready")
 		}
 	} else {
-		s.logger.Info("token_valid")
+		s.logger.Info("access token is valid, webhook is ready")
 	}
 
 	ticker := time.NewTicker(3 * time.Hour)
@@ -100,13 +105,14 @@ func (s *Solver) runTokenManager(stopCh <-chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
+			s.logger.Info("scheduled token refresh starting")
 			if err := s.refreshTokens(); err != nil {
-				s.logger.Error("scheduled_token_refresh_failed", "error", err.Error())
+				s.logger.Error("scheduled token refresh failed", "error", err.Error())
 			} else {
-				s.logger.Info("scheduled_token_refresh_ok")
+				s.logger.Info("scheduled token refresh completed")
 			}
 		case <-stopCh:
-			s.logger.Info("token_manager_stopped")
+			s.logger.Info("token manager stopped")
 			return
 		}
 	}
@@ -122,35 +128,30 @@ func (s *Solver) validateToken() error {
 
 func (s *Solver) refreshTokens() error {
 	start := time.Now()
-	s.logger.Info("token_refresh_starting")
 
 	refreshToken, err := s.getRefreshToken()
 	if err != nil {
 		return fmt.Errorf("get refresh token: %w", err)
 	}
-	s.logger.Info("token_refresh_got_refresh_token")
 
 	appID, appSecret, err := s.getAppCredentials()
 	if err != nil {
 		return fmt.Errorf("get app credentials: %w", err)
 	}
-	s.logger.Info("token_refresh_got_credentials", "app_id", appID)
 
 	newTokens, err := s.api.RefreshToken(appID, appSecret, refreshToken)
 	if err != nil {
-		return fmt.Errorf("refresh token: %w", err)
+		return fmt.Errorf("oauth token exchange: %w", err)
 	}
-	s.logger.Info("token_refresh_received_new_tokens",
-		"expires_in", newTokens.ExpiresIn,
-		"token_type", newTokens.TokenType,
-	)
 
 	if err := s.patchTokenSecret(newTokens.AccessToken, newTokens.RefreshToken); err != nil {
-		return fmt.Errorf("save tokens: %w", err)
+		return fmt.Errorf("save tokens to secret: %w", err)
 	}
-	s.logger.Info("token_refresh_saved_to_secret",
+
+	s.logger.Info("new tokens saved to k8s secret",
 		"secret", s.secretName,
 		"namespace", s.namespace,
+		"expires_in", newTokens.ExpiresIn,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 
