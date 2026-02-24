@@ -6,7 +6,7 @@ import (
 
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
 	"github.com/flant/cert-manager-webhook-nicru/nicru"
-	"k8s.io/klog/v2"
+	_ "k8s.io/component-base/logs/json/register"
 )
 
 var appVersion string
@@ -21,8 +21,6 @@ func main() {
 	if version == "" {
 		version = "dev"
 	}
-	klog.SetSlogLogger(logger)
-
 	logger.Info("starting cert-manager-webhook-nicru", "version", version)
 
 	groupName := os.Getenv("GROUP_NAME")
@@ -41,6 +39,8 @@ func main() {
 	if secretName == "" {
 		secretName = nicru.DefaultSecretName
 	}
+
+	os.Args = append(os.Args, "--logging-format=json")
 
 	solver := nicru.NewSolver(namespace, secretName, logger)
 

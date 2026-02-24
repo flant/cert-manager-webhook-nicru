@@ -4,12 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+)
+
+const (
+	refreshMarginRatio  = 0.75
+	minRefreshInterval  = 5 * time.Minute
+	maxRetryInterval    = 10 * time.Minute
+	maxConsecutiveFails = 5
 )
 
 func (s *Solver) getAccessToken() (string, error) {
@@ -84,38 +92,75 @@ func (s *Solver) patchTokenSecret(accessToken, refreshToken string) error {
 func (s *Solver) runTokenManager(stopCh <-chan struct{}) {
 	s.logger.Info("token manager started, validating current access token")
 
-	if err := s.validateToken(); err != nil {
-		s.logger.Warn("access token is invalid or expired, will try to refresh",
+	expiresIn, err := s.startupTokenCheck()
+	if err != nil {
+		s.logger.Error("both access and refresh tokens are invalid, cannot operate - exiting",
 			"error", err.Error(),
 		)
-		if err := s.refreshTokens(); err != nil {
-			s.logger.Error("failed to refresh token on startup, webhook may not work until next retry",
-				"error", err.Error(),
-			)
-		} else {
-			s.logger.Info("token refreshed successfully on startup, webhook is ready")
-		}
-	} else {
-		s.logger.Info("access token is valid, webhook is ready")
+		os.Exit(1)
 	}
 
-	ticker := time.NewTicker(3 * time.Hour)
-	defer ticker.Stop()
+	refreshInterval := calculateRefreshInterval(expiresIn)
+	s.logger.Info("token refresh scheduled",
+		"refresh_in", refreshInterval.String(),
+		"token_expires_in_sec", expiresIn,
+	)
+
+	consecutiveFails := 0
+	timer := time.NewTimer(refreshInterval)
+	defer timer.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-timer.C:
 			s.logger.Info("scheduled token refresh starting")
-			if err := s.refreshTokens(); err != nil {
-				s.logger.Error("scheduled token refresh failed", "error", err.Error())
+			newExpiresIn, err := s.refreshTokensWithExpiry()
+			if err != nil {
+				consecutiveFails++
+				retryIn := retryInterval(consecutiveFails)
+				s.logger.Error("scheduled token refresh failed, will retry",
+					"error", err.Error(),
+					"consecutive_failures", consecutiveFails,
+					"retry_in", retryIn.String(),
+				)
+				if consecutiveFails >= maxConsecutiveFails {
+					s.logger.Error("too many consecutive refresh failures, webhook is non-functional - exiting",
+						"consecutive_failures", consecutiveFails,
+					)
+					os.Exit(1)
+				}
+				timer.Reset(retryIn)
 			} else {
-				s.logger.Info("scheduled token refresh completed")
+				consecutiveFails = 0
+				nextRefresh := calculateRefreshInterval(newExpiresIn)
+				s.logger.Info("scheduled token refresh completed",
+					"token_expires_in_sec", newExpiresIn,
+					"next_refresh_in", nextRefresh.String(),
+				)
+				timer.Reset(nextRefresh)
 			}
 		case <-stopCh:
 			s.logger.Info("token manager stopped")
 			return
 		}
 	}
+}
+
+func (s *Solver) startupTokenCheck() (int, error) {
+	if err := s.validateToken(); err != nil {
+		s.logger.Warn("access token is invalid or expired, will try to refresh",
+			"error", err.Error(),
+		)
+		expiresIn, refreshErr := s.refreshTokensWithExpiry()
+		if refreshErr != nil {
+			return 0, refreshErr
+		}
+		s.logger.Info("token refreshed successfully on startup, webhook is ready")
+		return expiresIn, nil
+	}
+
+	s.logger.Info("access token is valid, webhook is ready")
+	return 14400, nil
 }
 
 func (s *Solver) validateToken() error {
@@ -126,26 +171,26 @@ func (s *Solver) validateToken() error {
 	return s.api.ValidateToken(token)
 }
 
-func (s *Solver) refreshTokens() error {
+func (s *Solver) refreshTokensWithExpiry() (int, error) {
 	start := time.Now()
 
 	refreshToken, err := s.getRefreshToken()
 	if err != nil {
-		return fmt.Errorf("get refresh token: %w", err)
+		return 0, fmt.Errorf("get refresh token: %w", err)
 	}
 
 	appID, appSecret, err := s.getAppCredentials()
 	if err != nil {
-		return fmt.Errorf("get app credentials: %w", err)
+		return 0, fmt.Errorf("get app credentials: %w", err)
 	}
 
 	newTokens, err := s.api.RefreshToken(appID, appSecret, refreshToken)
 	if err != nil {
-		return fmt.Errorf("oauth token exchange: %w", err)
+		return 0, fmt.Errorf("oauth token exchange: %w", err)
 	}
 
 	if err := s.patchTokenSecret(newTokens.AccessToken, newTokens.RefreshToken); err != nil {
-		return fmt.Errorf("save tokens to secret: %w", err)
+		return 0, fmt.Errorf("save tokens to secret: %w", err)
 	}
 
 	s.logger.Info("new tokens saved to k8s secret",
@@ -155,5 +200,21 @@ func (s *Solver) refreshTokens() error {
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 
-	return nil
+	return newTokens.ExpiresIn, nil
+}
+
+func calculateRefreshInterval(expiresInSec int) time.Duration {
+	d := time.Duration(float64(time.Duration(expiresInSec)*time.Second) * refreshMarginRatio)
+	if d < minRefreshInterval {
+		return minRefreshInterval
+	}
+	return d
+}
+
+func retryInterval(consecutiveFails int) time.Duration {
+	d := time.Duration(1<<uint(consecutiveFails)) * 30 * time.Second
+	if d > maxRetryInterval {
+		return maxRetryInterval
+	}
+	return d
 }
