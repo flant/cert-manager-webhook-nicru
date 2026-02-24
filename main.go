@@ -1,35 +1,45 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
-	"k8s.io/klog/v2"
+	"github.com/flant/cert-manager-webhook-nicru/nicru"
 )
 
-const (
-	nameSecret      = "nicru-tokens"
-	apiUrl          = `https://api.nic.ru/`
-	oauthUrl        = apiUrl + `oauth/token`
-	urlCommit       = apiUrl + `dns-master/services/%s/zones/%s/commit`
-	urlCreateRecord = apiUrl + `dns-master/services/%s/zones/%s/records`
-	urlDeleteRecord = apiUrl + `dns-master/services/%s/zones/%s/records/%s`
-	urlGetRecord    = apiUrl + `dns-master/services/%s/zones/%s/records`
-	urlGetZoneInfo  = apiUrl + `dns-master/zones/?token=%s`
-)
-
-var (
-	GroupName = os.Getenv("GROUP_NAME")
-	Namespace = os.Getenv("NAMESPACE")
-)
+var appVersion string
 
 func main() {
-	if GroupName == "" {
-		klog.Fatal("group name must be specified")
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	version := appVersion
+	if version == "" {
+		version = "dev"
+	}
+	logger.Info("starting cert-manager-webhook-nicru", "version", version)
+
+	groupName := os.Getenv("GROUP_NAME")
+	if groupName == "" {
+		logger.Error("GROUP_NAME environment variable is required")
+		os.Exit(1)
 	}
 
-	c := DNSProviderSolver{}
-	go c.cronUpdateToken()
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		logger.Error("NAMESPACE environment variable is required")
+		os.Exit(1)
+	}
 
-	cmd.RunWebhookServer(GroupName, &c)
+	secretName := os.Getenv("SECRET_NAME")
+	if secretName == "" {
+		secretName = nicru.DefaultSecretName
+	}
+
+	solver := nicru.NewSolver(namespace, secretName, logger)
+
+	cmd.RunWebhookServer(groupName, solver)
 }
